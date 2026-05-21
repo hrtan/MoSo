@@ -5,23 +5,7 @@ This is the **official PyTorch implementation** of our NeurIPS 2023 paper:
 > *The University of Hong Kong, The Chinese University of Hong Kong, DAMO Academy (Alibaba Group), Hupan Lab*
 > NeurIPS 2023 &nbsp;|&nbsp; [[Paper (arXiv:2310.14664)]](https://arxiv.org/abs/2310.14664)
 
----
 
-## Overview
-
-Modern deep learning relies on ever-larger datasets, many of which contain **redundant or noisy** samples. **MoSo** is a data-pruning method that ranks each training sample by **how much it would change the optimal empirical risk if it were removed from the training set**:
-
-$$
-\mathcal{M}(z) \;=\; \mathcal{L}\!\big(S\setminus z,\, w^{\*}_{S\setminus z}\big) \;-\; \mathcal{L}\!\big(S\setminus z,\, w^{\*}_{S}\big).
-$$
-
-Computing this exactly via leave-one-out retraining is hopeless (≈45 GPU-years on ImageNet-1K). We instead derive a **first-order, training-dynamics-aware estimator** with linear complexity and bounded approximation error:
-
-$$
-\widehat{\mathcal{M}}(z) \;=\; \mathbb{E}_{t\sim \mathcal{U}\{1,\dots,T\}}\!\Big[\tfrac{T}{N}\,\eta_t\, \nabla \mathcal{L}(S\setminus z,\, w_t)^{\top}\,\nabla \ell(z,\, w_t)\Big].
-$$
-
-Intuition: a sample whose gradient consistently aligns with the **average** gradient over the whole training trajectory is informative, and gets a high score. Noisy samples and outliers receive *low* (or negative) scores and are pruned first.
 
 
 ## Repository structure
@@ -142,23 +126,8 @@ python retraining.py \
 
 `--pr` is the **pruning ratio** (`0.5` keeps half the data, `0.8` keeps 20%). Set `--random 1` to retrain on a randomly pruned subset of the same size — useful as a sanity-check baseline.
 
----
 
-## Reproducing the paper experiments
 
-| Experiment | Dataset | Surrogate model | Target model | Stage 3 args |
-|---|---|---|---|---|
-| Main pruning curves (Fig. 1a) | CIFAR-100 | ResNet-50 | ResNet-50 | `--pr {0.2, 0.4, 0.6, 0.7, 0.8}` |
-| Main pruning curves (Fig. 1b) | Tiny-ImageNet | ResNet-50 | ResNet-50 | `--dataset tiny --pr ...` |
-| Generalization to SENet (Fig. 3a) | CIFAR-100 | ResNet-50 | SENet | `--model senet` in Stage 3 |
-| Generalization to EfficientNet (Fig. 3b) | CIFAR-100 | ResNet-50 | EfficientNet-B0 | `--model EfficientNetB0` |
-| Robustness to label noise (Fig. 3c/d) | CIFAR-100 | ResNet-50 | ResNet-50 | `--noise_ratio 0.2` in **all three** stages |
-
-Notes:
-- For the **noisy-label** experiments, generate a noise mask once and place it under `<path>/noise_mask/label.pth` (a `torch.long` tensor of length `len(trainset)` with the corrupted labels). The stage scripts will pick it up automatically when `--noise_ratio > 0`.
-- For the **architecture-transfer** experiments, you only need to re-run **Stage 3** with a different `--model`; the MoSo scores produced in Stage 2 are reused as-is.
-
----
 
 ## Key arguments (cheat sheet)
 
@@ -175,26 +144,6 @@ Notes:
 | `--trainaug` | Stages 1 & 3 | `0`: none, `1`: AutoAugment (CIFAR-10 only), `2`: RandAugment, `3`: AugMix |
 | `--random` | Stage 3 | `1` enables random pruning (baseline) |
 
----
-
-## Algorithm at a glance
-
-```
-Input : dataset S, pruning ratio δ, surrogate iterations T, partitions I
-Output: pruned coreset Ŝ ⊂ S of size (1-δ)|S|
-
-1.  Partition S into S_1, ..., S_I    (one per GPU)
-2.  for each S_i in parallel:
-       train surrogate net on S_i for T epochs, saving { (w_t, η_t) }
-3.  for each sample z in S_i:
-       M̂(z) = E_t [ η_t · ⟨ ∇L(S_i\z, w_t),  ∇ℓ(z, w_t) ⟩ ]
-4.  Combine M̂(·) across partitions → global score vector
-5.  Ŝ ← top-(1-δ) samples by M̂ (class-balanced)
-```
-
-This is exactly Algorithm 1 of the paper; the three Python files implement steps 1–2, 3–4, and the downstream training on `Ŝ`, respectively.
-
----
 
 ## Citation
 
